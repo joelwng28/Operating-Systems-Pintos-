@@ -1,6 +1,4 @@
 Functionality of system calls:
-- New Test
-3	print-name
 - Test argument passing on Pintos command line.
 3	args-none
 3	args-single
