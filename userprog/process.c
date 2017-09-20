@@ -18,6 +18,10 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#define LOGGING_LEVEL 6
+
+#include "lib/log.h"
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -30,6 +34,12 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+
+  // NOTE:
+  // To see this print, make sure LOGGING_LEVEL in this file is <= L_TRACE (6)
+  // AND LOGGING_ENABLE = 1 in lib/log.h
+  // Also, probably won't pass with logging enabled.
+  log(L_TRACE, "Started process execute: %s", file_name);
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
