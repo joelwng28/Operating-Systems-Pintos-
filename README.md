@@ -9,6 +9,10 @@ This is the [User Programs][userprog] project in Pintos. To get started:
 2. Submitting your Project:
   - [Create a **pull request**][pull-request] on the original repository to turn in the assignment.
 
+BETA Installation Script:
+Tested on Ubuntu 16.04. Supports bash only.
+Run the install script: `source install.sh`
+Manual installation steps will be posted soon.
 
 <!-- Links -->
 [userprog]: https://web.stanford.edu/class/cs140/projects/pintos/pintos_3.html#SEC32

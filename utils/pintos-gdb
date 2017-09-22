@@ -2,7 +2,16 @@
 
 # Path to GDB macros file.  Customize for your site.
 ###--- Change the path to point to your gdb-macros file ---###
-GDBMACROS=/home/ramesh/EE461S/SKKU/pintos/misc/gdb-macros
+GDBMACROS_DEFAULT=/home/ramesh/EE461S/SKKU/pintos/misc/gdb-macros
+
+if [ -z $GDBMACROS ]; then
+  echo "!!! WARNING: GDBMACROS NOT SET. !!!"
+  echo "See pintos-gdb file to manually set variable"
+fi
+
+GDBMACROS=${GDBMACROS:-$GDBMACROS_DEFAULT}
+
+#GDBMACROS=/home/ramesh/EE461S/SKKU/pintos/misc/gdb-macros}
 
 # Choose correct GDB.
 if command -v i386-elf-gdb >/dev/null 2>&1; then
