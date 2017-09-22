@@ -10,8 +10,11 @@ This is the [User Programs][userprog] project in Pintos. To get started:
   - [Create a **pull request**][pull-request] on the original repository to turn in the assignment.
 
 BETA Installation Script:
+
 Tested on Ubuntu 16.04. Supports bash only.
+
 Run the install script: `source install.sh`
+
 Manual installation steps will be posted soon.
 
 <!-- Links -->
