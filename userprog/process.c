@@ -24,6 +24,9 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+// Aaron
+static struct semaphore thing;
+// End Aaron
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -91,12 +94,11 @@ start_process (void *file_name_)
     thread_exit ();
 
   // Aaron: implement arg parsing
-  // TODO Aaron: handle proper format onto stack (\0, NULL, etc.)
   // Reverse string 
   uint32_t argc = 0;
   char **argv;
   char *argv0;
-  
+  char *argvs[128];
 
   // Splitting and putting on stack 
   char *savePtr;
@@ -115,15 +117,16 @@ start_process (void *file_name_)
 		if_.esp--;
 		charCount++;
 	}
-	argc++;
-	memcpy(if_.esp, "\0", 1);		
+	argvs[argc] = ++if_.esp;
+	memcpy(--if_.esp, "\0", 1);		
 	if_.esp--;
+	argc++;
 	currentWord = strtok_r(NULL, " ", &savePtr);
   }
 
   // Zero Padding
   if_.esp += 2;
-  argv0 = if_.esp;
+  //argv0 = if_.esp;
   if_.esp--;
   int padSize = charCount % 4;	// TODO Aaron: Won't work for lengths < 4
   for (int i = 0; i < padSize; i++) {
@@ -138,9 +141,16 @@ start_process (void *file_name_)
   }
   if_.esp++;
 
-  // Argv0
+  /* Argv0
   if_.esp -= 4;
   memcpy(if_.esp, &argv0, 4);
+  */
+
+  // Args[]
+  for (i = 0; i < argc; i++) {
+	  if_.esp -= 4;
+	  memcpy(if_.esp, &(argvs[i]), 4);
+  }
 
   // Argv
   argv = if_.esp;
@@ -151,7 +161,7 @@ start_process (void *file_name_)
   if_.esp -= 4;
   memcpy(if_.esp, &argc, 4);
   
-  // Fake return addr
+  // Fake return addr i.e. fill w/ NULL
   if_.esp--;
   for (int i = 0; i < 4; i++) {
 	memcpy(if_.esp, "\0", 1);		
