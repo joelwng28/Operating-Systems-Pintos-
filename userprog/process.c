@@ -49,6 +49,7 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Create a new thread to execute FILE_NAME. */
+  // Aaron: file_name may be just the file w/o args
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
@@ -71,10 +72,96 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
+  // Aaron
+  // palloc_free_page messes up 'file_name'
+  char file_name_copy[strlen(file_name_) + 1];
+  char *charPointer = file_name_ + strlen(file_name_) - 1;
+  int i = 0;
+  while (charPointer >= file_name_) {
+  	file_name_copy[i] = *charPointer;
+	charPointer--;
+	i++;
+  }
+  file_name_copy[i] = '\0';
+  // End Aaron
+
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success)
     thread_exit ();
+
+  // Aaron: implement arg parsing
+  // TODO Aaron: handle proper format onto stack (\0, NULL, etc.)
+  // Reverse string 
+  uint32_t argc = 0;
+  char **argv;
+  char *argv0;
+  
+
+  // Splitting and putting on stack 
+  char *savePtr;
+  int charCount = 0;
+  char *currentWord = strtok_r(file_name_copy, " ", &savePtr);
+  if_.esp--;	// Decrement from PHYS_BASE
+  // Begin w/ null char
+  memcpy(if_.esp, "\0", 1);		
+  if_.esp--;
+  charCount++;
+  while (currentWord != NULL) {
+	char *currentChar = currentWord;
+	while (*currentChar != '\0') {
+		memcpy(if_.esp, currentChar, 1);		
+		currentChar++;
+		if_.esp--;
+		charCount++;
+	}
+	argc++;
+	memcpy(if_.esp, "\0", 1);		
+	if_.esp--;
+	currentWord = strtok_r(NULL, " ", &savePtr);
+  }
+
+  // Zero Padding
+  if_.esp += 2;
+  argv0 = if_.esp;
+  if_.esp--;
+  int padSize = charCount % 4;	// TODO Aaron: Won't work for lengths < 4
+  for (int i = 0; i < padSize; i++) {
+	memcpy(if_.esp, "\0", 1);		
+	if_.esp--;
+  }
+
+  // NULL
+  for (int i = 0; i < 4; i++) {
+	memcpy(if_.esp, "\0", 1);		
+	if_.esp--;
+  }
+  if_.esp++;
+
+  // Argv0
+  if_.esp -= 4;
+  memcpy(if_.esp, &argv0, 4);
+
+  // Argv
+  argv = if_.esp;
+  if_.esp -= 4;
+  memcpy(if_.esp, &argv, 4);
+
+  // Argc
+  if_.esp -= 4;
+  memcpy(if_.esp, &argc, 4);
+  
+  // Fake return addr
+  if_.esp--;
+  for (int i = 0; i < 4; i++) {
+	memcpy(if_.esp, "\0", 1);		
+	if_.esp--;
+  }
+  if_.esp++;
+
+  hex_dump(if_.esp, if_.esp, 44, true);
+  // End Aaron
+  
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -98,6 +185,9 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED)
 {
+  // Aaron
+  while(1){}
+  // End Aaron
   return -1;
 }
 
