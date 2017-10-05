@@ -17,15 +17,18 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-
 #define LOGGING_LEVEL 6
 
 #include "lib/log.h"
 
+// Aaron
+#include "threads/synch.h"
+// End Aaron
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 // Aaron
-static struct semaphore thing;
+//static struct semaphore processSema;
 // End Aaron
 
 /* Starts a new thread running a user program loaded from
@@ -67,6 +70,9 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+  // Aaron
+  //sema_init(&processSema, 0);
+  // End Aaron
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -169,7 +175,7 @@ start_process (void *file_name_)
   }
   if_.esp++;
 
-  hex_dump(if_.esp, if_.esp, 44, true);
+  //hex_dump(if_.esp, if_.esp, 44, true);
   // End Aaron
   
 
@@ -197,6 +203,8 @@ process_wait (tid_t child_tid UNUSED)
 {
   // Aaron
   while(1){}
+  //sema_down(&processSema);
+  return 0;
   // End Aaron
   return -1;
 }
@@ -224,6 +232,9 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+    // Aaron
+    //sema_up(&processSema);
+    // End Aaron
 }
 
 /* Sets up the CPU for running user code in the current
