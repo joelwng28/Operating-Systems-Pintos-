@@ -9,10 +9,11 @@
 #include "userprog/process.h"
 #include "userprog/pagedir.h"
 #include "devices/shutdown.h"
+#include <devices/input.h>
 
 typedef int pid_t;
 
-//for peek at parts of stack
+//for peeking at parts of stack
 #define syscallSize 1
 #define intSize 1 
 #define ptrSize 1
@@ -22,36 +23,10 @@ typedef int pid_t;
 
 static void syscall_handler (struct intr_frame *);
 
-//from user/lib/syscall.h
-// void halt (void) NO_RETURN;
-// void exit (int status) NO_RETURN;
-// pid_t exec (const char *file);
-// int wait (pid_t);
-// bool create (const char *file, unsigned initial_size);
-// bool remove (const char *file);
-// int open (const char *file);
-// int filesize (int fd);
-// int read (int fd, void *buffer, unsigned length);
-// int write (int fd, const void *buffer, unsigned length);
-// void seek (int fd, unsigned position);
-// unsigned tell (int fd);
-// void close (int fd);
-
 void
 syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-}
-
-//helper function to ensure pointer is in user space, not null, and mapped
-static bool
-isAddressValid(void *pointer){
-  void *ptr = pagedir_get_page(thread_current()->pagedir, pointer);
-  if(!is_user_vaddr(pointer) || (pointer == 0) || !ptr){
-      exit(-1);
-      return false;
-  }
-  return true;
 }
 
 /* Terminates Pintos by calling shutdown_power_off() 
@@ -68,7 +43,6 @@ that will be returned. Conventionally, a status of 0 indicates success
 and nonzero values indicate errors. */
 static void 
 exit(int status){ //todo: tell waiting parent, child exited
-    struct thread* curr = thread_current();
     printf("%s: exit(%d)\n", thread_name(), status);
     thread_exit();
 }
@@ -87,8 +61,8 @@ exec(const char *cmd_line){ //todo: add synchronization for parent/child
 /*Waits for a child process pid and retrieves the child's exit status.*/
 static int
 wait(pid_t pid){
-  //todo: return status
-  process_wait();
+  //todo: return status??
+  return process_wait(pid);
 }
 
 /*Creates a new file called file initially initial_size bytes in size.
@@ -96,10 +70,7 @@ wait(pid_t pid){
  opening the new file is a separate operation which would require a open system call.*/
 static bool 
 create (const char *file, unsigned initial_size){
- if(filesys_create(file, initial_size)){ //todo: synch
-      return true;
-  }
-  return false;
+  return filesys_create(file, initial_size); //todo: synch
 }
 
 /*Deletes the file called file. Returns true if successful, false otherwise.
@@ -107,17 +78,22 @@ A file may be removed regardless of whether it is open or closed,
 and removing an open file does not close it. See Removing an Open File, for details.*/
 static bool
 remove (const char *file){
-   if(filesys_remove(file)){
-    return true;
-   }
-   return false;
+   return filesys_remove(file);
 }
 
 /*Opens the file called file. Returns a nonnegative integer handle 
 called a "file descriptor" (fd), or -1 if the file could not be opened.*/
 static int
-open (const char *file){ //implement FD
-  return filesys_open(file);
+open (const char *file){ 
+  //todo: filesys_open() return pointer, so add to FDT
+  //return filesys_open(file);
+  return 0;
+}
+
+static int
+filesize (int fd){
+  //todo: get filesize
+  return 0;
 }
 
 /*Reads size bytes from the file open as fd into buffer.
@@ -126,14 +102,18 @@ open (const char *file){ //implement FD
  Fd 0 reads from the keyboard using input_getc().*/
 static int
 read (int fd, void *buffer, unsigned length){
+  int size = 0;
+
   if(fd == STDIN_FILENO){
       uint8_t* local_buffer = (uint8_t *) buffer;
-      for (int i = 0; i < length; i++){
+      for (unsigned i = 0; i < length; i++){
         local_buffer[i] = input_getc();
+        size++;
       }
       return size;
   }
   //file_read()
+  return 0;
 }
 
 /*Writes size bytes from buffer to the open file fd.
@@ -147,6 +127,7 @@ write (int fd, const void *buffer, unsigned length){
   }
   //todo: implement FDT and write to it
   //use file_write() to write to file
+  return 0;
 }
 
 /*Changes the next byte to be read or written in open file fd to position,
@@ -161,7 +142,7 @@ seek (int fd, unsigned position){
   expressed in bytes from the beginning of the file.*/
 static unsigned 
 tell (int fd){
-  
+  return 0;
 }
 
 /*Closes file descriptor fd.
@@ -172,6 +153,17 @@ close (int fd){
 
 }
 
+//helper function to ensure pointer is in user space, not null, and mapped
+static bool
+isAddressValid(const void *pointer){
+  void *ptr = pagedir_get_page(thread_current()->pagedir, pointer);
+  if(!is_user_vaddr(pointer) || (pointer == 0) || !ptr){
+      exit(-1);
+      return false;
+  }
+  return true;
+}
+
 static void
 syscall_handler (struct intr_frame *f UNUSED)
 {
@@ -179,12 +171,14 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   //peek at system call args from stack -> call corresponding handler
   int *esp = f->esp;
-  int syscall_number = *esp;
-  if(!is_user_vaddr(syscall_number)){
-    exit(-1);
+  void* syscall_number_ptr = esp;
+  if(!isAddressValid(syscall_number_ptr)){ 
+    exit(-1); 
   }
 
+  int syscall_number = *esp;
   void *arg1, *arg2, *arg3;
+
   switch (syscall_number){
       case SYS_HALT:
           halt();
@@ -192,58 +186,62 @@ syscall_handler (struct intr_frame *f UNUSED)
       case SYS_EXIT:
           arg1 = esp + syscallSize;
           if(isAddressValid(arg1)){
-            f->error_code = *arg1; //return to kernel?
-            exit(*arg1);
+            f->error_code = *((int*)arg1); //return to kernel?
+            exit(*((int*)arg1));
           }
           break;
       case SYS_EXEC:
           arg1 = esp + syscallSize;
-          if(isAddressValid(arg1)){ f->eax = exec(*arg1); }
+          if(isAddressValid(arg1)){ f->eax = exec(*((char**)arg1)); }
           break;
       case SYS_WAIT:
           arg1 = esp + syscallSize;
-          if(isAddressValid(arg1)){ wait(*arg1); }
+          if(isAddressValid(arg1)){ f->eax = wait(*(int*)arg1); }
           break;
       case SYS_CREATE:
           arg1 = esp + syscallSize;
           arg2 = esp + syscallSize + ptrSize;
-          if(isAddressValid(arg1) && isAddressValid(arg2)){ f->eax = create(*arg1, *arg2); }
+          if(isAddressValid(arg1) && isAddressValid(arg2)){ f->eax = create(*((char**)arg1), *((unsigned*)arg2)); }
           break;
       case SYS_REMOVE:
           arg1 = esp + syscallSize;
-          if(isAddressValid(arg1)){ f->eax = remove(*arg1); }
+          if(isAddressValid(arg1)){ f->eax = remove(*((char**)arg1)); }
           break;
       case SYS_OPEN:
           arg1 = esp + syscallSize;
-          if(isAddressValid(arg1)){ f->eax = open(*arg1); }
+          if(isAddressValid(arg1)){ f->eax = open(*((char**)arg1)); }
           break;
       case SYS_FILESIZE:
-          //filesize(*(esp + syscallSize));
+          arg1 = esp + syscallSize;
+          if(isAddressValid(arg1)){ filesize(*((int*)arg1)); }
           break;
       case SYS_READ: 
           arg1 = esp + syscallSize;
           arg2 = esp + syscallSize + intSize;
           arg3 = esp + syscallSize + intSize + ptrSize;
-          if(isAddressValid){ read(*arg1, *arg2, *arg3); }
+          if(isAddressValid(arg1) && isAddressValid(arg2) && isAddressValid(arg3)){ f->eax = read(*((int*)arg1), *((void**)arg2), *((unsigned*)arg3)); }
           break;
       case SYS_WRITE: 
           arg1 = esp + syscallSize;
           arg2 = esp + syscallSize + intSize;
-          arg3 = esp + syscallSize + intSize + ptrSize;
-          if(isAddressValid){ write(*arg1, *arg2, *arg3); }
+          arg3 = esp + syscallSize + intSize + ptrSize; 
+          if(isAddressValid(arg1) && isAddressValid(arg2) && isAddressValid(arg3)){ f->eax = write(*((int*)arg1), *((void**)arg2), *((unsigned*)arg3)); }
           break;
       case SYS_SEEK:
-          //seek(*(esp + syscallSize), *(esp + syscallSize + intSize));
+          arg1 = esp + syscallSize;
+          arg2 = esp + syscallSize + intSize; 
+          if(isAddressValid(arg1) && isAddressValid(arg2)){ seek(*((int*)arg1), *((unsigned*)arg2)); }
           break;
       case SYS_TELL:
-          //tell(*(esp + syscallSize));
+          arg1 = esp + syscallSize;
+          if(isAddressValid(arg1)){ f->eax = tell(*((int*)arg1)); }
           break;
       case SYS_CLOSE:
-          //close(*(esp + syscallSize));
+          arg1 = esp + syscallSize;
+          if(isAddressValid(arg1)){ close(*((int*)arg1)); }
           break;
       default:
           break;
-  }
-
+        }
   thread_exit ();
 }
