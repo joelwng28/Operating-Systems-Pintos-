@@ -60,7 +60,6 @@ exit(int status){ //todo: tell waiting parent, child exited
     argPointer++;
     int status = *argPointer;
     */
-
     struct thread* curr = thread_current();
     printf ("%s: exit(%d)\n", thread_name(), status); 
     thread_exit();
@@ -86,7 +85,7 @@ until it knows whether the child process successfully loaded its executable.
 You must use appropriate synchronization to ensure this.*/
 static pid_t
 exec(const char *cmd_line){ //todo: add synchronization for parent/child
-  if(isAddressValid(&cmd_line)){
+  if(isAddressValid(cmd_line)){
    return process_execute(cmd_line);
  }
  return -1;
@@ -94,10 +93,10 @@ exec(const char *cmd_line){ //todo: add synchronization for parent/child
 
 /*Waits for a child process pid and retrieves the child's exit status.*/
 static int
-wait(pid_t pid){
+wait(pid_t *pid){
   //todo: return status
-   if(isAddressValid(&pid)){
-    return process_wait(pid);
+   if(isAddressValid(pid)){
+    return process_wait(*pid);
   }
   return -1;
 }
@@ -108,11 +107,11 @@ wait(pid_t pid){
 static bool 
 create (const char *file, unsigned initial_size){
   //todo: synch
-  if(isAddressValid(&file) && isAddressValid(&initial_size)){
+  //if(isAddressValid(&file) && isAddressValid(&initial_size)){
     if(filesys_create(file, initial_size)){
       return true;
     }
-  }
+  //}
   return false;
 }
 
@@ -145,7 +144,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   //peek at system call args from stack -> call corresponding handler
   int *esp = f->esp;
   int syscall_number = *esp;
-  // Debug: hex_dump(esp, esp, 44, true);
+  //hex_dump(esp, esp, 44, true);
   if(!is_user_vaddr(esp)){
     exit(-1);
   }
@@ -162,11 +161,10 @@ syscall_handler (struct intr_frame *f UNUSED)
       	  f->eax = exec(*(esp + 1));
     	  break;
       case SYS_WAIT:
-          wait(*(esp + 1));
+          wait((esp + 1));
           break;
       case SYS_CREATE:
-	  // Aaron: Idk what this is lol
-          f->eax = create(*(esp + 4), *(esp + 5));
+          f->eax = create(*(esp + 1), *(esp + 2));
           break;
       case SYS_REMOVE:
           f->eax = remove(*(esp + 1));
