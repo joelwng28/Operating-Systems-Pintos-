@@ -6,6 +6,9 @@
 #include "threads/vaddr.h"
 #include <stdbool.h>
 #include "filesys/filesys.h"
+#include "userprog/process.h"
+#include "userprog/pagedir.h"
+#include "devices/shutdown.h"
 
 typedef int pid_t;
 
@@ -196,7 +199,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       case SYS_EXEC:
           arg1 = esp + syscallSize;
           if(isAddressValid(arg1)){ f->eax = exec(*arg1); }
-    	    break;
+          break;
       case SYS_WAIT:
           arg1 = esp + syscallSize;
           if(isAddressValid(arg1)){ wait(*arg1); }
