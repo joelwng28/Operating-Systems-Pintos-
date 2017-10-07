@@ -28,7 +28,8 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 // Aaron
-//static struct semaphore processSema;
+static struct semaphore processExecuteSema;
+static struct semaphore processWaitSema;
 // End Aaron
 
 /* Starts a new thread running a user program loaded from
@@ -39,6 +40,7 @@ tid_t
 process_execute (const char *file_name)
 {
   char *fn_copy;
+  char *file_name_copy = file_name;
   tid_t tid;
 
   // NOTE:
@@ -55,10 +57,20 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Create a new thread to execute FILE_NAME. */
-  // Aaron: file_name may be just the file w/o args
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  // Aaron kinda
+  sema_init(&processExecuteSema, 0);
+  sema_init(&processWaitSema, 0);
+
+  // Grabbing file_name w/o args
+  char *dummyPointer;
+  char *execName = strtok_r(file_name_copy, " ", &dummyPointer);
+  // End Aaron
+
+  tid = thread_create (execName, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
+
+  sema_up(&processExecuteSema);
   return tid;
 }
 
@@ -68,10 +80,24 @@ static void
 start_process (void *file_name_)
 {
   char *file_name = file_name_;
+  int nameLength = strlen(file_name);
   struct intr_frame if_;
   bool success;
-  // Aaron
-  //sema_init(&processSema, 0);
+
+  // Aaron: Reversing file name and args
+  char file_name_reverse[nameLength + 1];
+  char *charPointer = file_name + nameLength - 1;
+  int i = 0;
+  while (charPointer >= file_name) {
+  	file_name_reverse[i] = *charPointer;
+	charPointer--;
+	i++;
+  }
+  file_name_reverse[i] = '\0';
+
+  // Grabbing file_name w/o args
+  char *dummyPointer;
+  char *execName = strtok_r(file_name, " ", &dummyPointer);
   // End Aaron
 
   /* Initialize interrupt frame and load executable. */
@@ -79,20 +105,7 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
-
-  // Aaron
-  // palloc_free_page messes up 'file_name'
-  char file_name_copy[strlen(file_name_) + 1];
-  char *charPointer = file_name_ + strlen(file_name_) - 1;
-  int i = 0;
-  while (charPointer >= file_name_) {
-  	file_name_copy[i] = *charPointer;
-	charPointer--;
-	i++;
-  }
-  file_name_copy[i] = '\0';
-  // End Aaron
+  success = load (execName, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -100,7 +113,6 @@ start_process (void *file_name_)
     thread_exit ();
 
   // Aaron: implement arg parsing
-  // Reverse string 
   uint32_t argc = 0;
   char **argv;
   char *argv0;
@@ -109,12 +121,13 @@ start_process (void *file_name_)
   // Splitting and putting on stack 
   char *savePtr;
   int charCount = 0;
-  char *currentWord = strtok_r(file_name_copy, " ", &savePtr);
+  char *currentWord = strtok_r(file_name_reverse, " ", &savePtr);
   if_.esp--;	// Decrement from PHYS_BASE
   // Begin w/ null char
   memcpy(if_.esp, "\0", 1);		
   if_.esp--;
   charCount++;
+  
   while (currentWord != NULL) {
 	char *currentChar = currentWord;
 	while (*currentChar != '\0') {
@@ -125,6 +138,7 @@ start_process (void *file_name_)
 	}
 	argvs[argc] = ++if_.esp;
 	memcpy(--if_.esp, "\0", 1);		
+	charCount++;
 	if_.esp--;
 	argc++;
 	currentWord = strtok_r(NULL, " ", &savePtr);
@@ -132,9 +146,9 @@ start_process (void *file_name_)
 
   // Zero Padding
   if_.esp += 2;
-  //argv0 = if_.esp;
   if_.esp--;
-  int padSize = charCount % 4;	// TODO Aaron: Won't work for lengths < 4
+  // charCount-1 to account for last null copied
+  int padSize = (charCount-1) % 4;	// TODO Aaron: Won't work for lengths < 4
   for (int i = 0; i < padSize; i++) {
 	memcpy(if_.esp, "\0", 1);		
 	if_.esp--;
@@ -199,20 +213,29 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED)
+process_wait (tid_t child_tid)
 {
-  // Aaron
-  while(1){}
-  //sema_down(&processSema);
+  if (child_tid == TID_ERROR) {
+	return -1;	
+  }
+  /* Find which thread struct child_tid refers to
+  struct list_elem *e = list_head(&test);
+  	while ((e = list_next(e)) != list_end(&test)) {
+		// check for tid and dereference entry
+	}*/
+  // Check the semaphore of thread struct
+  sema_down(&processWaitSema);
+  //list_remove (&thread_current()->processElem);
   return 0;
-  // End Aaron
-  return -1;
 }
 
 /* Free the current process's resources. */
 void
 process_exit (void)
 {
+  // Aaron
+  sema_down(&processExecuteSema);
+  // End Aaron
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
@@ -233,7 +256,7 @@ process_exit (void)
       pagedir_destroy (pd);
     }
     // Aaron
-    //sema_up(&processSema);
+    sema_up(&processWaitSema);
     // End Aaron
 }
 
